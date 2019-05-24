@@ -4,16 +4,6 @@ const debug = require('debug')('TuyAPI:device');
 const debugError = require('debug')('TuyAPI:device:error');
 const debugColor = require('debug')('TuyAPI:device:color');
 
-/**
- *
-    var steckdose = new TuyaDevice({
-        id: '03200240600194781244',
-        key: 'b8bdebab418f5b55',
-        ip: '192.168.178.45',
-        type: "socket"
-    });
- */
-
 // Helpers
 const Parser = require('tuyapi/lib/message-parser');
 

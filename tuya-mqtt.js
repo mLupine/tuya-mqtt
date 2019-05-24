@@ -40,7 +40,7 @@ const mqtt_client = mqtt.connect({
 });
 
 mqtt_client.on('connect', function (err) {
-    debug("Verbindung mit MQTT-Server hergestellt");
+    debug("Connected to the MQTT server");
     connected = true;
     var topic = CONFIG.topic + '#';
     mqtt_client.subscribe(topic, {
@@ -51,15 +51,15 @@ mqtt_client.on('connect', function (err) {
 
 mqtt_client.on("reconnect", function (error) {
     if (connected) {
-        debug("Verbindung mit MQTT-Server wurde unterbrochen. Erneuter Verbindungsversuch!");
+        debug("Connection to the MQTT server was interrupted and reconnected");
     } else {
-        debug("Verbindung mit MQTT-Server konnte nicht herrgestellt werden.");
+        debug("Connection to the MQTT server was interrupted");
     }
     connected = false;
 });
 
 mqtt_client.on("error", function (error) {
-    debug("Verbindung mit MQTT-Server konnte nicht herrgestellt werden.", error);
+    debug("Unable to connect to the MQTT server", error);
     connected = false;
 });
 
@@ -76,17 +76,6 @@ function IsJsonString(text) {
 }
 
 /**
- * check mqtt-topic string for old notation with included device type
- * @param {String} topic
- */
-function checkTopicForOldNotation(_topic) {
-    var topic = _topic.split("/");
-    var type = topic[1];
-    var result = (type == "socket" || type == "lightbulb");
-    return result;
-}
-
-/**
  * get action from mqtt-topic string
  * @param {String} topic
  * @returns {String} action type
@@ -94,11 +83,7 @@ function checkTopicForOldNotation(_topic) {
 function getActionFromTopic(_topic) {
     var topic = _topic.split("/");
 
-    if (checkTopicForOldNotation(_topic)) {
-        return topic[5];
-    } else {
-        return topic[4];
-    }
+    return topic[4];
 }
 
 /**
@@ -111,20 +96,11 @@ function getActionFromTopic(_topic) {
 function getDeviceFromTopic(_topic) {
     var topic = _topic.split("/");
 
-    if (checkTopicForOldNotation(_topic)) {
-        return {
-            id: topic[2],
-            key: topic[3],
-            ip: topic[4],
-            type: topic[1]
-        };
-    } else {
-        return {
-            id: topic[1],
-            key: topic[2],
-            ip: topic[3]
-        };
-    }
+    return {
+        id: topic[1],
+        key: topic[2],
+        ip: topic[3]
+    };
 }
 
 /**
@@ -136,33 +112,59 @@ function getDeviceFromTopic(_topic) {
 function getCommandFromTopic(_topic, _message) {
     var topic = _topic.split("/");
     var command = null;
+    let isDps = typeof topic[7] !== "undefined" && topic[5].toLowerCase() == "dps";
 
-    if (checkTopicForOldNotation(_topic)) {
-        command = topic[6];
-    } else {
-        command = topic[5];
-    }
+    command = isDps ? topic[7] : topic[5];
 
-    if (command == null) {
+    if (typeof command === "undefined" || command == null) {
         command = _message;
     }
 
     if (command != "1" && command != "0" && IsJsonString(command)) {
         debug("command is JSON");
-        command = JSON.parse(command);
+        var commandReturn = JSON.parse(command);
     } else {
         if (command.toLowerCase() != "toggle") {
             // convert simple commands (on, off, 1, 0) to TuyAPI-Commands
             var convertString = command.toLowerCase() == "on" || command == "1" || command == 1 ? true : false;
-            command = {
+            var commandReturn = {
                 set: convertString
             }
+            if (isDps) {
+                commandReturn.dps = topic[6].toString();
+                switch (commandReturn.dps) {
+                    case '1':
+                    case '16':
+                    case '17':
+                        const map = { 'on': true, 'off': false }
+                        commandReturn.set = typeof map[commandReturn.set] !== "undefined"
+                            ? map[commandReturn.set]
+                            : commandReturn.set;
+                        break;
+                    case '4':
+                    case '6':
+                        commandReturn.set = command
+                        break;
+                    case '5':
+                        const map = { 'cool': '3', 'dry': '2', 'fan_only': '4' }
+                        commandReturn.set = typeof map[commandReturn.set] !== "undefined"
+                            ? map[commandReturn.set]
+                            : commandReturn.set;
+                        break;
+                    case '8':
+                        const map = { 'auto': '0', 'low': '1', 'medium': '2', 'high': '3' }
+                        commandReturn.set = typeof map[commandReturn.set] !== "undefined"
+                            ? map[commandReturn.set]
+                            : commandReturn.set;
+                        break;
+                }
+            }
         } else {
-            command = command.toLowerCase();
+            commandReturn = command.toLowerCase();
         }
     }
 
-    return command;
+    return commandReturn;
 }
 
 mqtt_client.on('message', function (topic, message) {
@@ -326,9 +328,9 @@ function MQTT_Tester() {
         if (mqtt_client.connected != connected) {
             connected = mqtt_client.connected;
             if (connected) {
-                debug('MQTT-Server verbunden.');
+                debug('MQTT Server connected');
             } else {
-                debug('MQTT-Server nicht verbunden.');
+                debug('MQTT Server not connected');
             }
         }
     }
